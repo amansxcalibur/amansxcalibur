@@ -1,0 +1,48 @@
+name: Koi
+
+on:
+  schedule:
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/koi.yml]
+
+permissions:
+  contents: write
+
+concurrency: koi
+
+jobs:
+  koi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch git-koi from my fork
+        uses: actions/checkout@v4
+        with:
+          repository: amansxcalibur/git-koi
+          # pin commit :)
+          ref: 7305e9b1fadee6f43d3b4fa543a25d4cde79856e
+          path: .git-koi-src
+          persist-credentials: false
+
+      - name: Build
+        run: cargo build --release --locked --manifest-path .git-koi-src/Cargo.toml
+
+      - name: Draw the koi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bin=.git-koi-src/target/release/git-koi
+          $bin collect "$GITHUB_REPOSITORY_OWNER" --output "$RUNNER_TEMP/snap.json"
+          $bin render "$RUNNER_TEMP/snap.json" --output-dir koi --body white
+
+      - name: Commit the koi if it changed
+        run: |
+          git add koi/koi.gif
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet -m "koi: draw the day's koi"
+          git push --quiet
